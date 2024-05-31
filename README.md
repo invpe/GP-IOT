@@ -4,6 +4,8 @@
 
 As part of an initiative to enhance the [GridShell](https://github.com/invpe/GridShell) project, i thought about executing binaries instead of scripts by dynamically loading and executing them on ESP32 nodes.
 
+This repo called GP-IOT - General Purpose (Internet of) Things is my workbench, to get me to a place where i can do it issues free, easily and in secure manner.
+
 General Purpose Things - draw inspiration from established distributed computing systems like BOINC, focusing on executing binaries on nodes. This repository introduces a Sketch named `Runner`, designed to dynamically load binaries from SPIFFS, and a `Task` source code that is an example binary. It locates the function address within the binary and executes it in a separate thread, showcasing a practical example of dynamic binary execution on IoT devices.
 
 # Demo
