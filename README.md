@@ -183,6 +183,59 @@ And the failure
 [19:33:14:997] Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
 ```
 
+
+To even better visualize the problem, let's take these examples.
+First, let's look how memory is mapped in one of ESP32 `.ld` files:
+
+```
+// Memory segments defined in ESP32 .ld file
+...
+iram0_0_seg (RX) : org = 0x40080000, len = 0x20000
+dram0_0_seg (RW) : org = 0x3FFB0000 + 0xdb5c,
+..
+```
+
+
+Now let's create a simple raw binary, that will return the address of a variable `char` 
+allocated on the `RUNNER` and passed to raw binary.
+
+```
+// Return the address of 'output' provided by RUNNER sketch
+void taskFunction(const char* input, uintptr_t *outputAddr, char *output) {            
+     *outputAddr = (uintptr_t)output;  
+}
+```
+
+The returned output is:
+
+```
+[19:34:39:081] Program buffer address: 0x4008E580␊ << IRAM
+[19:34:39:081] Metadata address: 0x4008E588␊ << IRAM
+[19:34:39:089] Calculated Task Function Address: 0x4008E580␊ << IRAM
+[19:34:39:093] Address of hex in taskFunction: 0x3FFB21B8␊ << `output` in DRAM
+```
+
+Now let's return the address of our `hex_digits` instead
+
+```
+// Return the address of `hex_digits` from the raw binary
+void taskFunction(const char* input, uintptr_t *outputAddr, char *output) {            
+     *outputAddr = (uintptr_t)hex_digits;  
+}
+```
+
+And the output is:
+
+```
+[19:39:55:027] Program buffer address: 0x4008E580 << IRAM
+[19:39:55:027] Metadata address: 0x4008E5A0 << IRAM
+[19:39:55:035] Calculated Task Function Address: 0x4008E584 << IRAM
+[19:39:55:039] Address of hex in taskFunction: 0xE << LOCAL TO BINARY
+```
+
+
+
+
 ### Solution
 
 Not known yet, as it might appear that the proper `.ld` script should be able to resolve the issue, by placing the variables at the proper READ ONLY segment in memory. TBD
