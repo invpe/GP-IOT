@@ -138,3 +138,7 @@ The `0xE` is in relation to the `0x00` - which is the starting point at which we
 [19:24:52:934] Calculated Task Function Address: 0x4008E584
 [19:24:52:934] Address of hex in taskFunction: 0xE  <<<<<<
 ```
+
+### Solution
+
+Not known yet, as it might appear that the proper `.ld` script should be able to resolve the issue, by placing the variables at the proper READ ONLY segment in memory. TBD
