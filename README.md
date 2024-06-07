@@ -97,3 +97,44 @@ SECTIONS {
    
    `xTaskCreate(taskRunner, "TaskRunner", 8192, program, 1, NULL);`
    
+
+# ISSUES
+
+## Variables Address space
+
+The binary that is built is generated with a linker script that starts from `0x00`,
+we store the metadata at the top, and then following the rest of the program including variables.
+This means, that any variable address will be in relation to the starting address we have given in the `.ld` file, i.e here:
+
+```
+#include <cstdlib>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include "../RUNNER/Common.h" 
+
+static const char hex_digits[] = "0123456789ABCDEF";
+ 
+void taskFunction(const char* input, uintptr_t *outputAddr) {  
+     
+     *outputAddr = (uintptr_t)hex_digits;
+     
+}
+ 
+
+struct TaskMetadata __attribute__((section(".task_metadata"))) taskMetadata = {    
+    (uint32_t)&taskFunction,
+    "AAAAAAAAAAAAAAA"  // Initialize dummy text to see if our metadata is seen at the top of the binary
+};
+```
+
+The address of `hex_digits` is `0xE` - so when we try to use it, we can't (the program crashes) as the variable is not stored there for ESP32.
+The `0xE` is in relation to the `0x00` - which is the starting point at which we build the whole raw binary.
+
+```
+[19:24:52:920] Program buffer address: 0x4008E580
+[19:24:52:934] Metadata address: 0x4008E5A0
+[19:24:52:934] Task Function Address in Metadata: 0x4
+[19:24:52:934] Calculated Task Function Address: 0x4008E584
+[19:24:52:934] Address of hex in taskFunction: 0xE  <<<<<<
+```
