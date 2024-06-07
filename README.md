@@ -104,7 +104,10 @@ SECTIONS {
 
 The binary that is built is generated with a linker script that starts from `0x00`,
 we store the metadata at the top, and then following the rest of the program including variables.
-This means, that any variable address will be in relation to the starting address we have given in the `.ld` file, i.e here:
+
+The address `0xE` returned is relative to the start of the raw binary, not an absolute address in the ESP32 memory space. When the raw binary is loaded into memory, `0xE` is not a valid memory address on the ESP32, which is why accessing it directly causes issues.
+
+This means, that _any variable_ address will be in relation to the starting address we have given in the `.ld` file, i.e see example below:
 
 ```
 #include <cstdlib>
@@ -128,7 +131,7 @@ struct TaskMetadata __attribute__((section(".task_metadata"))) taskMetadata = {
 };
 ```
 
-The address of `hex_digits` is `0xE` - so when we try to use it, we can't (the program crashes) as the variable is not stored there for ESP32.
+The address of `hex_digits` is `0xE` - if we try to use it, we can't (the program crashes) as the variable is not stored there for ESP32.
 The `0xE` is in relation to the `0x00` - which is the starting point at which we build the whole raw binary.
 
 ```
@@ -137,6 +140,47 @@ The `0xE` is in relation to the `0x00` - which is the starting point at which we
 [19:24:52:934] Task Function Address in Metadata: 0x4
 [19:24:52:934] Calculated Task Function Address: 0x4008E584
 [19:24:52:934] Address of hex in taskFunction: 0xE  <<<<<<
+```
+
+Here is the use example:
+
+```
+#include <cstdlib>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include "../RUNNER/Common.h" 
+
+static const char hex_digits[] = "0123456789ABCDEF";
+ 
+void taskFunction(const char* input, uintptr_t *outputAddr, char *output) {  
+          
+     *outputAddr = (uintptr_t)hex_digits;
+
+     // Will crash
+     for(int x = 0; x < 13; x++)
+     {
+        output[x] = hex_digits[x];
+     }
+}
+ 
+
+struct TaskMetadata __attribute__((section(".task_metadata"))) taskMetadata = {    
+    (uint32_t)&taskFunction,
+    "AAAAAAAAAAAAAAA"  // Initialize dummy text to see if our metadata is seen at the top of the binary
+};
+
+```
+
+And the failure
+
+```
+[19:33:14:979] Size of TaskMetadata: 20
+[19:33:14:985] Program buffer address: 0x4008E580
+[19:33:14:992] Metadata address: 0x4008E5B4
+[19:33:14:992] Task Function Address in Metadata: 0x4
+[19:33:14:992] Calculated Task Function Address: 0x4008E584
+[19:33:14:997] Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
 ```
 
 ### Solution
