@@ -105,7 +105,7 @@ SECTIONS {
 The binary that is built is generated with a linker script that starts from `0x00`,
 we store the metadata at the top, and then following the rest of the program including variables.
 
-The address `0xE` returned is relative to the start of the raw binary, not an absolute address in the ESP32 memory space. When the raw binary is loaded into memory, `0xE` is not a valid memory address on the ESP32, which is why accessing it directly causes issues.
+The address `0xE` of a char array returned is relative to the start of the raw binary, not an absolute address in the ESP32 memory space. When the raw binary is loaded into memory, `0xE` is not a valid memory address on the ESP32, which is why accessing it directly causes issues.
 
 This means, that _any variable_ address will be in relation to the starting address we have given in the `.ld` file, i.e see example below:
 
