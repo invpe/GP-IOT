@@ -1,3 +1,6 @@
+/*
+  Dynamic raw binary (blob) load and execution on IRAM with ESP32 - runner sketch.
+*/
 #include <Arduino.h>
 #include <WiFi.h>
 #include <string>
@@ -5,55 +8,14 @@
 #include "esp_heap_caps.h"
 #include "FS.h"
 #include "SPIFFS.h"
-
-// Define the metadata structure stored at the start of the binary
-// We will load the function address from it.
-struct TaskMetadata {
-  uint32_t taskFunctionAddress;
-  char dummyText[16];
-};
-
-//
-typedef void (*task_func_t)(const char*, char*);
-
-void taskRunner(void* parameter) {
-  // Cast the parameter back to the original buffer pointer
-  uint8_t* programBuffer = reinterpret_cast<uint8_t*>(parameter);
-
-  // Extract the task function address from the metadata
-  TaskMetadata* metadata = reinterpret_cast<TaskMetadata*>(programBuffer);  
-  Serial.printf("Task Function Address           : 0x%X\n", metadata->taskFunctionAddress);
-
-  // Calculate the task function address by adding the offset to the buffer pointer
-  uintptr_t taskFunctionAddress = reinterpret_cast<uintptr_t>(programBuffer) + reinterpret_cast<uintptr_t>(metadata->taskFunctionAddress);
-  
-  Serial.printf("Program buffer address          : 0x%X\n", programBuffer);
-  Serial.printf("Calculated Task Function Address: 0x%X\n", taskFunctionAddress);
-
-  task_func_t task = reinterpret_cast<task_func_t>(taskFunctionAddress);
- 
-  // Call the task function
-  const char* input = "ESP32";
-  char output[100];
-  task(input, output);
-
-  // Print the return value
-  Serial.printf("Return value from task: %s\n", output);
-
-  // REMEMBER TO FREE THE PROGRAM MEMORY !!!!!
-  // void* program = heap_caps_malloc(fileSize, MALLOC_CAP_EXEC /*Memory must be able to run executable code */ || MALLOC_CAP_8BIT);
-  vTaskDelete(NULL);
-}
-
+#include "Common.h"
 
 // Will load binary in chunks, convert and place in dynamically executable allocated buffer
 // We can't have two buffers of a binary size at once, and we can't read from file directly to heap_caps_malloc allocated buffer
 // Thus we need this intermediate step of temporary buffer.
-void loadAndExecuteTask(const char* path) {
-
+void loadAndExecuteTask(const char* path) 
+{
   Serial.println("Loading from SPIFFS");
-
-
   // Open the binary file to read the whole binary including metadata
   File taskFile = SPIFFS.open(path, FILE_READ);
   if (!taskFile) {
@@ -76,7 +38,8 @@ void loadAndExecuteTask(const char* path) {
   }
 
   // Allocate memory for the task using heap_caps_malloc
-  void* program = heap_caps_malloc(fileSize, MALLOC_CAP_EXEC /*Memory must be able to run executable code */ || MALLOC_CAP_8BIT);
+  void* program = nullptr;
+  program = heap_caps_malloc(fileSize, MALLOC_CAP_EXEC || MALLOC_CAP_8BIT);
   if (!program) {
     Serial.println("Failed to allocate memory");
     taskFile.close();
@@ -110,6 +73,7 @@ void loadAndExecuteTask(const char* path) {
       return;
     }
 
+
     // Convert and copy the chunk into the heap_caps_malloc buffer
     for (size_t i = 0; i < chunkRead; i += 4) {
       uint32_t inst = (chunkBuffer[i + 3] << 24) + (chunkBuffer[i + 2] << 16) + (chunkBuffer[i + 1] << 8) + chunkBuffer[i];
@@ -120,28 +84,51 @@ void loadAndExecuteTask(const char* path) {
     bytesRead += chunkRead;
   }
 
+
   // Close the file
   taskFile.close();
 
   // Free the temporary buffer
   delete[] chunkBuffer;
 
-  Serial.println("SUBMITTING TASK");
-  // Create a FreeRTOS task to execute the loaded code
-  xTaskCreate(taskRunner, "TaskRunner", 8192, program, 1, NULL);
+  // Cast the parameter back to the original buffer pointer
+  uint8_t* programBuffer = reinterpret_cast<uint8_t*>(program);
+
+  // Calculate the start of the metadata at the end of the binary
+  TaskMetadata* metadata = reinterpret_cast<TaskMetadata*>(programBuffer + fileSize - sizeof(TaskMetadata));
+
+  // Base memory address (where we loaded the binary) plus the offset where the function resides (as genertaed by .ld file)
+  uintptr_t taskFunctionAddress = reinterpret_cast<uintptr_t>(programBuffer) + reinterpret_cast<uintptr_t>(metadata->taskFunctionAddress);
+
+  //
+  task_func_t task = reinterpret_cast<task_func_t>(taskFunctionAddress);
+
+  Serial.printf("File Size: %d\n", fileSize);
+  Serial.printf("Size of TaskMetadata: %d\n", sizeof(TaskMetadata));
+  Serial.printf("Program buffer address: 0x%X\n", (uintptr_t)programBuffer);
+  Serial.printf("Metadata address: 0x%X\n", (uintptr_t)programBuffer + fileSize - sizeof(TaskMetadata));
+  Serial.printf("Task Function Address in Metadata: 0x%X\n", metadata->taskFunctionAddress);
+  Serial.printf("Calculated Task Function Address: 0x%X\n", taskFunctionAddress);
+  
+  // Exec
+  const char* input = "ESP32";
+  uintptr_t hexOffset;
+  char output[17];                                                               // Allocate enough space for the output
+  task(reinterpret_cast<uintptr_t>(programBuffer), input, &hexOffset, output);  // Pass the base address as a pointer
+
+
+  Serial.printf("Return value from task: %s\n", output);
+  Serial.printf("Offset of hex in taskFunction: 0x%X\n", hexOffset);
+  Serial.printf("Absolute Address of hex: 0x%X\n", reinterpret_cast<uintptr_t>(programBuffer) + hexOffset);
+
+
+  heap_caps_free(program);
 }
 
 
 void setup() {
   Serial.begin(115200);
-  /*
-  WiFi.begin("WIFI", "WIFI12345667");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
-  */
+
   // Initialize SPIFFS
   if (!SPIFFS.begin(true)) {
     Serial.println("SPIFFS Mount Failed");
@@ -153,7 +140,8 @@ void setup() {
 }
 
 void loop() {
-  Serial.println(".");
   // Main firmware loop to maintain the network connection and manage tasks
+  size_t freeHeap = esp_get_free_heap_size();
+  Serial.println("Free heap size: " + String(freeHeap));
   delay(1000);
 }
