@@ -2,53 +2,60 @@
 #include <string.h>
 #include <cstdio>
 #include "../RUNNER/Common.h"
-#define GET_VAR(base, var) (*(typeof(var) *)((base) + (uintptr_t)(&(var)) - (uintptr_t)0x00))
-#define SET_VAR(base, var, value) (*(typeof(var) *)((base) + (uintptr_t)(&(var)) - (uintptr_t)0x00)) = (value)
-#define READ_ALIGNED_BYTES(base, arr, output, length) do {                   \
-    union {                                                                  \
-        uint32_t word;                                                       \
-        char bytes[4];                                                       \
-    } data;                                                                  \
-    uintptr_t arr_address = (base) + (uintptr_t)(arr);                       \
-    for (int i = 0; i < (length); i += 4) {                                  \
-        data.word = *((uint32_t*)(arr_address + i));                         \
-        for (int j = 0; j < 4 && (i + j) < (length); ++j) {                  \
-            (output)[i + j] = data.bytes[j];                                 \
-        }                                                                    \
-    }                                                                        \
-} while(0)
 
-uintptr_t uipBaseAddress; 
-const char hex_digits[]  = "0123456789ABCDEF";
-int iVariable = 0; 
-uint8_t uiVariable8 = 0; 
-uint16_t uiVariable16 = 0; 
-uint32_t uiVariable32 = 0; 
+// Macro for reading data with alignment consideration
+#define READ_ALIGNED_DATA(base, offset, buffer, length) \
+    do { \
+        for (int i = 0; i < length; i += 4) { \
+            union { char bytes[4]; uint32_t word; } data; \
+            data.word = *((uint32_t*)((base) + (offset) + i)); \
+            for (int j = 0; j < 4 && (i + j) < length; ++j) { \
+                buffer[i + j] = data.bytes[j]; \
+            } \
+        } \
+        buffer[length] = '\0'; \
+    } while (0)
 
-void taskFunction(uintptr_t baseAddress, const char* input,char *output) {
-    
-    // Test setting variable
-    SET_VAR(baseAddress, uipBaseAddress, baseAddress); // Works
-    SET_VAR(baseAddress, iVariable, 100);  // Works
-    SET_VAR(baseAddress, uiVariable32, 100); // Works
+const char hex_digits_LITERAL[] = "LITERALL_VARIABLE"; // .literal
+const char hex_digits_RODATA[] = "RODATA_VARIABLE"; // .rodata
+char hex_digits_DATA[] = "DATA_VARIABLE"; // .data
 
-    //SET_VAR(baseAddress, uiVariable16, 100); // Does not work due to alignment
-    //SET_VAR(baseAddress, uiVariable8, 100);  // Does not work due to alignment
+void test(char* output) {
+    output[0] = 0x41; // 'A'
+    output[1] = 0x42; // 'B'
+    output[2] = '\0'; // Null-terminate
+}
 
-    // Test getting variable
-    uint8_t uiA = GET_VAR(baseAddress, uiVariable8);  // Works
-    uint16_t uiB = GET_VAR(baseAddress, uiVariable16); // Works
-    uint32_t uiC = GET_VAR(baseAddress, uiVariable32); // Works
-    int iV = GET_VAR(baseAddress, iVariable);    // Works
+void taskFunction(uintptr_t baseAddress, const char* input, char* output) {
+    // Function call through address calculation
+    uintptr_t testFunctionAddress = baseAddress + (uintptr_t)test;
+    void (*testFunc)(char*) = (void (*)(char*))testFunctionAddress;
+    testFunc(output);
 
-    // Read from the hex_digits array using the macro
-    READ_ALIGNED_BYTES(baseAddress, hex_digits, output, 16);
-    output[16] = '\0'; // Null-terminate the output string 
+    // Direct access to .text section data
+    char hex_digits_TEXT[] = {0x41, 0x42, 0x43}; // .text
+    memcpy(output, hex_digits_TEXT, sizeof(hex_digits_TEXT));
 
+    // Example local variables
+    int iAlpha = 10;
+    int iBeta = 20;
+    int iDelta = iAlpha + iBeta;
+
+    // Accessing .rodata section
+    uintptr_t hex_digits_address_RODATA = baseAddress + (uintptr_t)hex_digits_RODATA;
+    READ_ALIGNED_DATA(hex_digits_address_RODATA, 0, output, 16);
+
+    // Accessing .data section
+    uintptr_t hex_digits_address_DATA = baseAddress + (uintptr_t)hex_digits_DATA;
+    READ_ALIGNED_DATA(hex_digits_address_DATA, 0, output, 16);
+
+    // Accessing .literal section
+    uintptr_t hex_digits_address_LITERAL = baseAddress + (uintptr_t)hex_digits_LITERAL;
+    READ_ALIGNED_DATA(hex_digits_address_LITERAL, 0, output, 16);
 }
 
 // Metadata
-struct TaskMetadata __attribute__((section(".task_metadata"))) taskMetadata = {    
+struct TaskMetadata __attribute__((section(".task_metadata"))) taskMetadata = {
     (uint32_t)&taskFunction,
     "AAAAAAAAAAAAAAA"
 };
