@@ -16,9 +16,10 @@
         buffer[length] = '\0'; \
     } while (0)
 
-const char hex_digits_LITERAL[] = "LITERALL_VARIABLE"; // .literal
-const char hex_digits_RODATA[] = "RODATA_VARIABLE"; // .rodata
-char hex_digits_DATA[] = "DATA_VARIABLE"; // .data
+const char hex_digits_LITERAL[] __attribute__((aligned(4))) = "LITERALL_VARIABLE"; // .literal
+const char hex_digits_RODATA[] __attribute__((aligned(4))) = "RODATA_VARIABLE"; // .rodata
+char hex_digits_DATA[] __attribute__((aligned(4))) = "DATA_VARIABLE"; // .data
+char hex_digits_DATA2[] __attribute__((aligned(4))) = "DATA2_VARIABLE"; // .data
 
 void test(char* output) {
     output[0] = 0x41; // 'A'
@@ -48,6 +49,10 @@ void taskFunction(uintptr_t baseAddress, const char* input, char* output) {
     // Accessing .data section
     uintptr_t hex_digits_address_DATA = baseAddress + (uintptr_t)hex_digits_DATA;
     READ_ALIGNED_DATA(hex_digits_address_DATA, 0, output, 16);
+    
+    // Accessing .data section
+    uintptr_t hex_digits_address_DATA2 = baseAddress + (uintptr_t)hex_digits_DATA2;
+    READ_ALIGNED_DATA(hex_digits_address_DATA2, 0, output, 16);
 
     // Accessing .literal section
     uintptr_t hex_digits_address_LITERAL = baseAddress + (uintptr_t)hex_digits_LITERAL;
