@@ -3,6 +3,8 @@
 #include <cstdio>
 #include "../RUNNER/Common.h"
 
+uintptr_t uiptrBaseAddress = 0x00;
+
 // Macro for reading data with alignment consideration
 #define READ_ALIGNED_DATA(base, offset, buffer, length) \
     do { \
@@ -15,6 +17,17 @@
         } \
         buffer[length] = '\0'; \
     } while (0)
+// Macro for writing data with alignment consideration
+#define WRITE_ALIGNED_DATA(base, offset, buffer, length) \
+    do { \
+        for (int i = 0; i < length; i += 4) { \
+            union { char bytes[4]; uint32_t word; } data; \
+            for (int j = 0; j < 4 && (i + j) < length; ++j) { \
+                data.bytes[j] = buffer[i + j]; \
+            } \
+            *((uint32_t*)((base) + (offset) + i)) = data.word; \
+        } \
+    } while (0)
 
 const char hex_digits_LITERAL[] __attribute__((aligned(4))) = "LITERALL_VARIABLE"; // .literal
 const char hex_digits_RODATA[] __attribute__((aligned(4))) = "RODATA_VARIABLE"; // .rodata
@@ -26,8 +39,15 @@ void test(char* output) {
     output[1] = 0x42; // 'B'
     output[2] = '\0'; // Null-terminate
 }
-
+// Test accessing sections from a function
+void test2(uintptr_t baseAddress, char* output) { 
+    READ_ALIGNED_DATA(baseAddress + (uintptr_t)hex_digits_RODATA, 0, output, 16);
+    READ_ALIGNED_DATA(baseAddress + (uintptr_t)hex_digits_DATA, 0, output, 16);    
+    READ_ALIGNED_DATA(baseAddress + (uintptr_t)hex_digits_DATA2, 0, output, 16); 
+    READ_ALIGNED_DATA(baseAddress + (uintptr_t)hex_digits_LITERAL, 0, output, 16);
+}
 void taskFunction(uintptr_t baseAddress, const char* input, char* output) {
+ 
     // Function call through address calculation
     uintptr_t testFunctionAddress = baseAddress + (uintptr_t)test;
     void (*testFunc)(char*) = (void (*)(char*))testFunctionAddress;
@@ -57,6 +77,11 @@ void taskFunction(uintptr_t baseAddress, const char* input, char* output) {
     // Accessing .literal section
     uintptr_t hex_digits_address_LITERAL = baseAddress + (uintptr_t)hex_digits_LITERAL;
     READ_ALIGNED_DATA(hex_digits_address_LITERAL, 0, output, 16);
+
+    // Function call through address calculation
+    uintptr_t testFunctionAddress2 = baseAddress + (uintptr_t)test2;
+    void (*testFunc2)(uintptr_t, char*) = (void (*)(uintptr_t, char*))testFunctionAddress2;
+    testFunc2(baseAddress, output);
 }
 
 // Metadata
